@@ -100,7 +100,6 @@ on({ id: dp_GridEnergy, change: 'ne' }, (obj) => {
     } else {
         avgOverflow.measurements.push(currentOverflow);
     }
-    old_logic();
 });
 
 // ################################ Get state of all consumers and subscribe to changes ###################################
