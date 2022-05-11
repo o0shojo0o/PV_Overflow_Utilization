@@ -9,7 +9,7 @@ const consumers = [
         // Name of the consumer
         name: 'Waschmaschine',
         // Datapoint to start the consumer
-        dp: 'homeconnect.0.BOSCH-WAV28G40-68A40E5081AE.commands.BSH_Common_Command_ResumeProgram',
+        dp: 'homeconnect.0.BOSCH-WAV28G40-68A40E5081AE.programs.active.BSH_Common_Root_ActiveProgram',
         // Is the consumer allowed to shut down from this script?
         shutdownAllowed: false,
         // [Optional] Is there a dependency for the activation of this consumer?
@@ -17,7 +17,17 @@ const consumers = [
         // [Optional] Is there a different data point for the activity of the consumer?
         dp_state: 'homeconnect.0.BOSCH-WAV28G40-68A40E5081AE.status.BSH_Common_Status_OperationState',
         // [Optional] Does the state have to be formatted or manipulated?
-        stateFormat: (value) => { return value == 'BSH.Common.EnumType.OperationState.Run' },
+        stateFormat: (value) => {
+            if (value == 'BSH.Common.EnumType.OperationState.Run') {
+                return true;
+            }
+            else if (value == true) {
+                return getState('homeconnect.0.BOSCH-WAV28G40-68A40E5081AE.programs.selected.BSH_Common_Root_SelectedProgram').val;
+            }
+            else {
+                return false;
+            }
+        },
         // From which overflow the consumer should be switched on 
         watt: 400,
         // A priority can be specified here if there are several similar start values
@@ -29,11 +39,21 @@ const consumers = [
     },
     {
         name: 'Trockner',
-        dp: 'homeconnect.0.BOSCH-WTX87M40-68A40E4BA96F.commands.BSH_Common_Command_ResumeProgram',
+        dp: 'homeconnect.0.BOSCH-WTX87M40-68A40E4BA96F.programs.active.BSH_Common_Root_ActiveProgram',
         shutdownAllowed: false,
         dp_depend: 'homeconnect.0.BOSCH-WTX87M40-68A40E4BA96F.status.BSH_Common_Status_RemoteControlStartAllowed',
         dp_state: 'homeconnect.0.BOSCH-WTX87M40-68A40E4BA96F.status.BSH_Common_Status_OperationState',
-        stateFormat: (value) => { return value == 'BSH.Common.EnumType.OperationState.Run' },
+        stateFormat: (value) => {
+            if (value == 'BSH.Common.EnumType.OperationState.Run') {
+                return true;
+            }
+            else if (value == true) {
+                return getState('homeconnect.0.BOSCH-WTX87M40-68A40E4BA96F.programs.selected.BSH_Common_Root_SelectedProgram').val;
+            }
+            else {
+                return false;
+            }
+        },
         watt: 400,
         prio: 2,
         depend_state: false,
@@ -41,11 +61,21 @@ const consumers = [
     },
     {
         name: 'Geschirrspühler',
-        dp: 'homeconnect.0.011110523002002336.commands.BSH_Common_Command_ResumeProgram',
+        dp: 'homeconnect.0.011110523002002336.programs.active.BSH_Common_Root_ActiveProgram',
         shutdownAllowed: false,
         dp_depend: 'homeconnect.0.011110523002002336.status.BSH_Common_Status_RemoteControlStartAllowed',
         dp_state: 'homeconnect.0.011110523002002336.status.BSH_Common_Status_OperationState',
-        stateFormat: (value) => { return value == 'BSH.Common.EnumType.OperationState.Run' },
+        stateFormat: (value) => {
+            if (value == 'BSH.Common.EnumType.OperationState.Run') {
+                return true;
+            }
+            else if (value == true) {
+                return getState('homeconnect.0.011110523002002336.programs.selected.BSH_Common_Root_SelectedProgram').val;
+            }
+            else {
+                return false;
+            }
+        },
         watt: 400,
         prio: 1,
         depend_state: false,
@@ -142,14 +172,20 @@ function newLogic(currentAVGOverflow) {
     // Check if currentAVGOverflow is greater than 0
     if (currentAVGOverflow > 0) {
         // Get all consumers where State is false and watt <= currentAVGOverflow and depend_state is true or null
-        let foundConsumers = consumers.filter(x => x.state == false && x.watt <= currentAVGOverflow && (x.dp_depend == null || x.depend_state == true));
+        let foundConsumers = consumers.filter(x => x.state == false && x.watt <= currentAVGOverflow && (!x.dp_depend || x.depend_state == true));
         // Sort by watt and prio   
         foundConsumers = foundConsumers.sort((a, b) => a.watt - b.watt || a.prio - b.prio);
         // Consumer found?
         if (foundConsumers.length > 0) {
             let firstConsumer = foundConsumers[0];
             firstConsumer.state = true;
-            setState(firstConsumer.dp, true);
+
+            if (firstConsumer.stateFormat) {
+                setState(firstConsumer.dp, firstConsumer.stateFormat(true));
+            } else {
+                setState(firstConsumer.dp, true);
+            }
+
             log(`currentAVGOverflow is ${currentAVGOverflow} -> set ${firstConsumer.name} state to true`);
 
         }
@@ -163,7 +199,11 @@ function newLogic(currentAVGOverflow) {
         if (foundConsumers.length > 0) {
             let firstConsumer = foundConsumers[0];
             firstConsumer.state = false;
-            setState(firstConsumer.dp, false);
+            if (firstConsumer.stateFormat) {
+                setState(firstConsumer.dp, firstConsumer.stateFormat(false));
+            } else {
+                setState(firstConsumer.dp, false);
+            }
             log(`currentAVGOverflow is ${currentAVGOverflow} -> set ${firstConsumer.name} state to false`);
         }
     }
