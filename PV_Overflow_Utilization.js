@@ -180,7 +180,6 @@ on({ id: dp_GridEnergy, change: 'ne' }, (obj) => {
     } else {
         avgOverflow.measurements.push(currentOverflow);
     }
-    old_logic();
 });
 
 // ################################ Get state of all consumers and subscribe to changes ###################################
@@ -310,46 +309,4 @@ function stateFormater(consumer, val) {
         return consumer.stateFormat(val);
     }
     return val;
-}
-
-
-
-// ###################################################### Old Stuff ######################################################
-
-
-const dp_WZTabBatt = 'fully-tablet-control.0.device.wohnzimmer.battery';
-const dp_WZOverflow = 'zigbee.0.5c0272fffe8c7945.state';
-
-let current_Consumption = 230;
-let current_WZTabBatt = getState(dp_WZTabBatt).val;
-let current_WZOverflow = getState(dp_WZOverflow).val;
-
-
-on({ id: dp_WZTabBatt, change: 'ne' }, (obj) => {
-    current_WZTabBatt = obj.state.val;
-    old_logic();
-});
-
-
-old_logic();
-
-function old_logic() {
-
-    if ((currentOverflow >= 10 && current_WZTabBatt <= 80) || current_WZTabBatt < 20) {
-        if (!current_WZOverflow) {
-            current_WZOverflow = true;
-            setState(dp_WZOverflow, true);
-            log('Wohnzimmer Überschuss Verwertung aktiviert');
-        }
-        return;
-    }
-
-    if (current_WZTabBatt == 100) {
-        if (current_WZOverflow) {
-            current_WZOverflow = false;
-            setState(dp_WZOverflow, false);
-            log('Wohnzimmer Überschuss Verwertung deaktiviert');
-        }
-        return;
-    }
 }
