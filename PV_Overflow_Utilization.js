@@ -1,7 +1,9 @@
 // ################################## Configuration of the consumers and the Logic #####################################
 
 // Average calculation duration in seconds
-const avgCalculationDuration = 60;
+const avgCalculationDuration = 180;
+// Smartmeter current
+const dp_GridEnergy = 'sonoff.0.SmartMeter.LK13BE_current';
 
 // Consumers
 const consumers = [
@@ -29,7 +31,7 @@ const consumers = [
             }
         },
         // From which overflow the consumer should be switched on 
-        watt: 400,
+        watt: 1,
         // A priority can be specified here if there are several similar start values
         prio: 1,
         // Internally variable!
@@ -54,8 +56,8 @@ const consumers = [
                 return false;
             }
         },
-        watt: 400,
-        prio: 2,
+        watt: 1,
+        prio: 1,
         depend_state: false,
         state: false
     },
@@ -76,23 +78,35 @@ const consumers = [
                 return false;
             }
         },
-        watt: 400,
+        watt: 1,
         prio: 1,
         depend_state: false,
         state: false
     },
-    // {
-    //     name: 'Klima',
-    //     dp: 'zigbee.0.5c0272fffe8c7945.state',
-    //     shutdownAllowed: true,
-    //     dp_depend: null,
-    //     dp_state: null,
-    //     stateFormat: null,
-    //     watt: 100,
-    //     prio: 0,
-    //     depend_state: false,
-    //     state: false
-    // },
+    {
+        name: 'E-Bike Charger (Dennis)',
+        dp: 'zigbee.0.5c0272fffe857db1.state',
+        shutdownAllowed: true,
+        dp_depend: null,
+        dp_state: null,
+        stateFormat: null,
+        watt: 170,
+        prio: 0,
+        depend_state: false,
+        state: false
+    },
+    {
+        name: 'E-Bike Charger (Nicole)',
+        dp: 'zigbee.0.5c0272fffe7f9d7b.state',
+        shutdownAllowed: true,
+        dp_depend: null,
+        dp_state: null,
+        stateFormat: null,
+        watt: 170,
+        prio: 0,
+        depend_state: false,
+        state: false
+    },
     // {
     //     name: 'Wohnzimmer Tablet',
     //     dp: 'zigbee.0.5c0272fffe8c7945.state',
@@ -105,11 +119,46 @@ const consumers = [
     //     depend_state: false,
     //     state: false
     // },
+    {
+        name: 'Test 15 Watt',
+        dp: '0_userdata.0.Test_15_Watt',
+        shutdownAllowed: true,
+        dp_depend: null,
+        dp_state: null,
+        stateFormat: null,
+        watt: 15,
+        prio: 0,
+        depend_state: false,
+        state: true
+    },
+    {
+        name: 'Test 10 Watt',
+        dp: '0_userdata.0.Test_10_Watt',
+        shutdownAllowed: true,
+        dp_depend: null,
+        dp_state: null,
+        stateFormat: null,
+        watt: 10,
+        prio: 0,
+        depend_state: false,
+        state: true
+    },
+    {
+        name: 'Test 500 Watt',
+        dp: '0_userdata.0.Test_500_Watt',
+        shutdownAllowed: true,
+        dp_depend: null,
+        dp_state: null,
+        stateFormat: null,
+        watt: 500,
+        prio: 0,
+        depend_state: false,
+        state: true
+    },
 ];
 
 // ################################## Calculation of the PV overflow in the average  #####################################
 
-const dp_GridEnergy = 'sonoff.0.SmartMeter.LK13BE_current';
 let currentOverflow = getState(dp_GridEnergy).val;
 const avgOverflow = { startMeasurement: null, measurements: [], currentAVGOverflow: null, };
 
@@ -122,14 +171,16 @@ on({ id: dp_GridEnergy, change: 'ne' }, (obj) => {
         avgOverflow.measurements.push(currentOverflow);
         // Set lastAVG from all measurements after x seconds from startMeasurement
     } else if (Date.now() - avgOverflow.startMeasurement > (avgCalculationDuration * 1000)) {
-        avgOverflow.currentAVGOverflow = Math.round(avgOverflow.measurements.reduce((a, b) => a + b, 0) / avgOverflow.measurements.length);
+        avgOverflow.currentAVGOverflow = Math.round(median(avgOverflow.measurements));//Math.round(avgOverflow.measurements.reduce((a, b) => a + b, 0) / avgOverflow.measurements.length);
         avgOverflow.measurements = [];
         avgOverflow.startMeasurement = null;
+        log(`currentAVGOverflow: ${avgOverflow.currentAVGOverflow}`);
         newLogic(avgOverflow.currentAVGOverflow);
         // Add current measurement to measurements
     } else {
         avgOverflow.measurements.push(currentOverflow);
     }
+    old_logic();
 });
 
 // ################################ Get state of all consumers and subscribe to changes ###################################
@@ -137,17 +188,11 @@ on({ id: dp_GridEnergy, change: 'ne' }, (obj) => {
 // Get current state of all consumers and subscribe to changes for each consumer
 for (const x of consumers) {
     const stateDP = x.dp_state ? x.dp_state : x.dp;
-    // Get current state
-    // If stateformat is set, check if state is in stateformat
-    if (x.stateFormat) {
-        x.state = x.stateFormat(getState(stateDP).val);
-    } else {
-        x.state = getState(stateDP).val;
-    }
+    x.state = stateFormater(x, getState(stateDP).val);
 
     // Sub State   
     on({ id: stateDP, change: 'ne' }, (obj) => {
-        x.state = obj.state.val;
+        x.state = stateFormater(x, obj.state.val);
     });
 
     // Has current consumer dependend DP?
@@ -156,12 +201,7 @@ for (const x of consumers) {
         x.depend_state = getState(x.dp_depend).val;
         // Sub State
         on({ id: x.dp_depend, change: 'ne' }, (obj) => {
-            // If stateformat is set, check if state is in stateformat
-            if (x.stateFormat) {
-                x.state = x.stateFormat(obj.state.val);
-            } else {
-                x.depend_state = obj.state.val;
-            }
+            x.depend_state = obj.state.val;
         });
     }
 }
@@ -177,34 +217,139 @@ function newLogic(currentAVGOverflow) {
         foundConsumers = foundConsumers.sort((a, b) => a.watt - b.watt || a.prio - b.prio);
         // Consumer found?
         if (foundConsumers.length > 0) {
-            let firstConsumer = foundConsumers[0];
-            firstConsumer.state = true;
-
-            if (firstConsumer.stateFormat) {
-                setState(firstConsumer.dp, firstConsumer.stateFormat(true));
-            } else {
-                setState(firstConsumer.dp, true);
+            const startConsumer = [foundConsumers[0]];
+            // Skip the first consumer, since it is already in the array, and run through the rest to yield the optimal consume. 
+            for (const consumer of foundConsumers.slice(1)) {
+                // Check whether more consumers must be switched on to compensate for the positive overflow. 
+                if (sumWatt(startConsumer) >= currentAVGOverflow) {
+                    break;
+                }
+                startConsumer.push(consumer);
             }
 
-            log(`currentAVGOverflow is ${currentAVGOverflow} -> set ${firstConsumer.name} state to true`);
+            // Now check whether the last consumer must be removed so that the overflow is not exceeded 
+            while (sumWatt(startConsumer) > currentAVGOverflow) {
+                startConsumer.pop();
+            }
+
+            // Set state of consumers to true
+            for (const consumer of startConsumer) {
+                consumer.state = true;
+                setState(consumer.dp, stateFormater(consumer, true));
+
+                log(`currentAVGOverflow is ${currentAVGOverflow} -> set ${consumer.name} state to true`);
+                pushOver_Dennis('Power_Consumption_Calculation', `currentAVGOverflow is ${currentAVGOverflow}W -> set ${consumer.name} state to true`, '');
+            }
 
         }
         // Check if currentAVGOverflow is less than 0
     } else if (currentAVGOverflow < 0) {
         // Get all consumers where State is true and shut down is allowed
-        let foundConsumers = consumers.filter(x => x.state == true && x.shutdownAllowed == true && x.watt <= (currentAVGOverflow * -1));
-        // Sort by watt descending 
-        foundConsumers = foundConsumers.sort((a, b) => a.watt - b.watt).reverse();
+        let foundConsumers = consumers.filter(x => x.state == true && x.shutdownAllowed == true);
+        // Sort by watt small to big 
+        foundConsumers = foundConsumers.sort((a, b) => a.watt - b.watt);
         // Consumer found?
         if (foundConsumers.length > 0) {
-            let firstConsumer = foundConsumers[0];
-            firstConsumer.state = false;
-            if (firstConsumer.stateFormat) {
-                setState(firstConsumer.dp, firstConsumer.stateFormat(false));
-            } else {
-                setState(firstConsumer.dp, false);
+            const shutdownConsumers = [foundConsumers[0]];
+            // Skip the first consumer, since it is already in the array, and run through the rest to yield the optimal shutdown. 
+            for (const consumer of foundConsumers.slice(1)) {
+                // Check whether more consumers must be switched off to compensate for the negative overflow. 
+                if (sumWatt(shutdownConsumers) > currentAVGOverflow * -1) {
+                    break;
+                }
+                shutdownConsumers.push(consumer);
             }
-            log(`currentAVGOverflow is ${currentAVGOverflow} -> set ${firstConsumer.name} state to false`);
+
+            // Now check if small consumers can be removed, so that not too much is switched off unnecessarily. 
+            let lastRemovedConsumer = null;
+            while (sumWatt(shutdownConsumers) >= currentAVGOverflow * -1) {
+                lastRemovedConsumer = shutdownConsumers.shift();
+            }
+            // I could not think of a better logic here  
+            if (lastRemovedConsumer != null) {
+                shutdownConsumers.push(lastRemovedConsumer);
+            }
+
+            // Set state of consumers to false
+            for (const consumer of shutdownConsumers) {
+                consumer.state = false;
+                setState(consumer.dp, stateFormater(consumer, false));
+
+                log(`currentAVGOverflow is ${currentAVGOverflow} -> set ${consumer.name} state to false`);
+                pushOver_Dennis('Power_Consumption_Calculation', `currentAVGOverflow is ${currentAVGOverflow}W -> set ${consumer.name} state to false`, '');
+            }
         }
+    }
+}
+
+function sumWatt(consumers) {
+    return consumers.reduce((a, b) => a + b.watt, 0);
+}
+
+function median(numbers) {
+    const sorted = Array.from(numbers).sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+
+    if (sorted.length % 2 === 0) {
+        return (sorted[middle - 1] + sorted[middle]) / 2;
+    }
+
+    return sorted[middle];
+}
+
+function pushOver_Dennis(titel, text, prio) {
+    sendTo("pushover.1", {
+        message: text,
+        title: titel,
+        priority: prio
+    });
+}
+
+function stateFormater(consumer, val) {
+    if (consumer.stateFormat) {
+        return consumer.stateFormat(val);
+    }
+    return val;
+}
+
+
+
+// ###################################################### Old Stuff ######################################################
+
+
+const dp_WZTabBatt = 'fully-tablet-control.0.device.wohnzimmer.battery';
+const dp_WZOverflow = 'zigbee.0.5c0272fffe8c7945.state';
+
+let current_Consumption = 230;
+let current_WZTabBatt = getState(dp_WZTabBatt).val;
+let current_WZOverflow = getState(dp_WZOverflow).val;
+
+
+on({ id: dp_WZTabBatt, change: 'ne' }, (obj) => {
+    current_WZTabBatt = obj.state.val;
+    old_logic();
+});
+
+
+old_logic();
+
+function old_logic() {
+
+    if ((currentOverflow >= 10 && current_WZTabBatt <= 80) || current_WZTabBatt < 20) {
+        if (!current_WZOverflow) {
+            current_WZOverflow = true;
+            setState(dp_WZOverflow, true);
+            log('Wohnzimmer Überschuss Verwertung aktiviert');
+        }
+        return;
+    }
+
+    if (current_WZTabBatt == 100) {
+        if (current_WZOverflow) {
+            current_WZOverflow = false;
+            setState(dp_WZOverflow, false);
+            log('Wohnzimmer Überschuss Verwertung deaktiviert');
+        }
+        return;
     }
 }
